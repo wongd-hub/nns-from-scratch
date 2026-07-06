@@ -75,7 +75,7 @@ results <- list()
 # For each epoch...
 for ( epoch in seq_len(.epochs) ) {
   
-  if ( .verbose & (epoch %% 1000) == 0 ) message(paste('Epoch:', epoch))
+  if ( .verbose & (epoch %% 1000) == 0 ) cat(paste('Epoch:', epoch))
 
   epoch_results <- list(loss = 0)
 
@@ -94,8 +94,6 @@ for ( epoch in seq_len(.epochs) ) {
     #  z_1 = input_1 * w_1 + input_2 * w_2 + input_3 * w_3
     # Which lends itself nicely to matrix multiplication:
     z1   <- activation_func(x_i %*% w_ih1)
-    # z2   <- activation_func(z1 %*% w_h1h2)
-    # yhat <- activation_func(z2 %*% w_h2o)
     z1b  <- cbind(1, z1) # We need a bias node for layer 1 too
     yhat <- activation_func(z1b %*% w_h1o)
 
@@ -112,24 +110,14 @@ for ( epoch in seq_len(.epochs) ) {
     #                                = (y - y_hat) * activation_func_deriv(y_hat) * z_j
     delta_o <- (y_i - yhat) * activation_func_deriv(yhat)
 
-    # Last hidden layer to first hidden layer backprop
-    # δ_j^h2 = z2 * (1 - z2) * sum_k(W_h2o * delta_o)
-    # delta_h2 <- activation_func_deriv(z2) * (delta_o %*% t(w_h2o))
-
     # First hidden layer to input layer backprop
-    # delta_h1 <- activation_func_deriv(z1) * (delta_o %*% t(w_h1o))
     delta_h1_full <- activation_func_deriv(z1b) * (delta_o %*% t(w_h1o))
     delta_h1      <- delta_h1_full[, -1, drop = FALSE]   # drop bias column
 
 
     ## Weight updates ----
 
-    # w <- w + η * δ * activity_of_sending_node
-
-    # w_h1o  <- w_h1o  + .eta * (t(z2) %*% delta_o)
-    # w_h1h2 <- w_h1h2 + .eta * (t(z1) %*% delta_h2)
-    # w_ih1  <- w_ih1  + .eta * (t(x_i) %*% delta_h1)
-    # w_ih1  <- w_ih1  + .eta * (t(x_i) %*% delta_h1)
+    # w = w + η * δ * activity_of_sending_node
 
     w_h1o <- w_h1o + .eta * (t(z1b) %*% delta_o)
     w_ih1 <- w_ih1 + .eta * (t(x_i) %*% delta_h1)
@@ -147,6 +135,8 @@ for ( epoch in seq_len(.epochs) ) {
     weight_noise = mean(abs(w_ih1[4, ]))   # noise col
   )
 
+  if ( .verbose & (epoch %% 1000) == 0 ) cat(paste(' | Loss:', 0.5 * epoch_results[['loss']]), '\n')
+
 }
 
 loss_df <- do.call(rbind, results)
@@ -157,26 +147,69 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 
+plot_dim <- list(width = 1684, height = 1684 * 9/16)
+dir.create('plots', showWarnings = FALSE)
+
+sysfonts::font_add_google('Space Grotesk', "space_grotesk") 
+showtext::showtext_auto()
+
+palette <- list(
+  'teal' = '#14b8a6',
+  'pink' = '#ec4899',
+  'grey' = '#888888'
+)
+
 loss_df %>% 
   ggplot(aes(x = epoch, y = loss)) +
   geom_line() +
-  scale_x_log10(labels = scales::comma)
+  scale_x_log10(
+    breaks = c(1, 10, 100, 1000, 10000, 100000, 1000000),
+    labels = scales::comma,
+    limits = c(1, 1200000)
+  ) +
+  labs(
+    title = 'Total loss by epoch',
+    x = 'log(Epoch)', y = 'Total L2 Loss'
+  ) +
+  theme_minimal(base_family = "space_grotesk")
 
-loss_df %>% 
-  select(epoch, starts_with('weight_')) %>% 
-  pivot_longer(-epoch, names_to = 'input', values_to = 'weight_value') %>% 
-  ggplot(aes(x = epoch, y = weight_value, colour = input)) +
-  geom_line() +
-  scale_x_log10(labels = scales::comma)
+ggsave(  
+  file.path('plots', "nn-loss.jpg"),  
+  device = 'jpg',  
+  width = plot_dim$width,  
+  height = plot_dim$height,  
+  units = 'px',  
+  dpi = 250
+)
+
+# loss_df %>% 
+#   select(epoch, starts_with('weight_')) %>% 
+#   pivot_longer(-epoch, names_to = 'input', values_to = 'weight_value') %>% 
+#   ggplot(aes(x = epoch, y = weight_value, colour = input)) +
+#   geom_line() +
+#   scale_x_log10(labels = scales::comma)
 
 # XOR demonstration
 cbind(input_mtx, target_mtx) %>% 
   as_tibble() %>% 
   mutate(target_mtx = as.character(target_mtx)) %>% 
   ggplot(aes(x = V1, y = V2, colour = target_mtx)) +
-  geom_jitter(width = 0.1, height = 0.1) +
+  geom_jitter(alpha = 0.7, width = 0.025, height = 0.025) +
   labs(
+    title = 'A demonstration of XOR data',
+    subtitle = 'Jitter applied for demonstration',
+    caption = 'n = 30',
     x = 'Col 1', y = 'Col 2', colour = 'Class'
   ) +
-  theme_minimal() +
+  coord_cartesian(xlim = c(-0.25, 1.25), ylim = c(-0.25, 1.25)) +
+  theme_minimal(base_family = "space_grotesk") +
   theme(legend.position = 'bottom')
+
+ggsave(  
+  file.path('plots', "xor-data.jpg"),  
+  device = 'jpg',  
+  width = plot_dim$width,  
+  height = plot_dim$width,  
+  units = 'px',  
+  dpi = 250
+)

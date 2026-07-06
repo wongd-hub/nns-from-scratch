@@ -2,7 +2,7 @@ library(ggraph)
 library(tidygraph)
 
 plot_dim <- list(width = 1684, height = 1684 * 9/16)
-dir.create('plots')
+dir.create('plots', showWarnings = FALSE)
 
 sysfonts::font_add_google('Space Grotesk', "space_grotesk") 
 showtext::showtext_auto()
