@@ -1,9 +1,10 @@
 # Linear algebra implementation of a neural network ----
 
-.epochs  <- 1000000
-.n_train <- 30
-.eta     <- 0.001 # Learning rate
-.verbose <- TRUE
+.epochs   <- 1000000
+.n_train  <- 30
+.eta      <- 0.001 # Learning rate
+.momentum <- 0.9
+.verbose  <- TRUE
 
 # Helpers ----
 ## Define our activation function ----
@@ -67,6 +68,9 @@ w_ih1 <- init_weights(rows = ncol(input_mtx), cols = nn_dim$nodes_per_layer)
 # 3 + 1 (bias) nodes in H1, so 4 rows. 1 output, so 1 col.
 w_h1o <- init_weights(rows = nn_dim$nodes_per_layer + 1, cols = 1)
 
+# Velocity matrices for momentum implementation
+v_h1o <- matrix(0, nrow = nrow(w_h1o), ncol = ncol(w_h1o))
+v_ih1 <- matrix(0, nrow = nrow(w_ih1), ncol = ncol(w_ih1))
 
 # Perform training loop ----
 
@@ -119,8 +123,15 @@ for ( epoch in seq_len(.epochs) ) {
 
     # w = w + η * δ * activity_of_sending_node
 
-    w_h1o <- w_h1o + .eta * (t(z1b) %*% delta_o)
-    w_ih1 <- w_ih1 + .eta * (t(x_i) %*% delta_h1)
+    grad_h1o <- t(z1b) %*% delta_o   # This epoch's raw update, before momentum
+    grad_ih1 <- t(x_i) %*% delta_h1
+
+    # Momentum, blend in 90% of the previous weight's update before applying
+    v_h1o <- .momentum * v_h1o + grad_h1o
+    v_ih1 <- .momentum * v_ih1 + grad_ih1
+
+    w_h1o <- w_h1o + .eta * v_h1o
+    w_ih1 <- w_ih1 + .eta * v_ih1
 
   }
 
@@ -128,11 +139,11 @@ for ( epoch in seq_len(.epochs) ) {
   # Capture mean absolute weight per input column, alongside loss
   results[[epoch]] <- data.frame(
     epoch        = epoch,
-    loss         = 0.5 * epoch_results[['loss']],
-    weight_x1    = mean(abs(w_ih1[1, ])),  # first XOR col
-    weight_x2    = mean(abs(w_ih1[2, ])),  # second XOR col
-    weight_bias  = mean(abs(w_ih1[3, ])),  # bias col
-    weight_noise = mean(abs(w_ih1[4, ]))   # noise col
+    loss         = 0.5 * epoch_results[['loss']]#,
+    # weight_x1    = mean(abs(w_ih1[1, ])),  # first XOR col
+    # weight_x2    = mean(abs(w_ih1[2, ])),  # second XOR col
+    # weight_bias  = mean(abs(w_ih1[3, ])),  # bias col
+    # weight_noise = mean(abs(w_ih1[4, ]))   # noise col
   )
 
   if ( .verbose & (epoch %% 1000) == 0 ) cat(paste(' | Loss:', 0.5 * epoch_results[['loss']]), '\n')
@@ -174,7 +185,7 @@ loss_df %>%
   theme_minimal(base_family = "space_grotesk")
 
 ggsave(  
-  file.path('plots', "nn-loss.jpg"),  
+  file.path('plots', "nn-loss-momentum.jpg"),  
   device = 'jpg',  
   width = plot_dim$width,  
   height = plot_dim$height,  
